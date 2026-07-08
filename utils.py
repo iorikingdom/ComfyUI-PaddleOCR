@@ -1,8 +1,11 @@
 import numpy as np
 import cv2
-import paddle
 import sys
-import os
+
+try:
+    import paddle
+except ImportError:
+    paddle = None
 
 def tensor_to_cv2_img(image):
     """
@@ -40,6 +43,12 @@ def get_paddle_hw_kwargs():
     Returns:
         dict: Kwargs compatible with PaddleXPipelineWrapper (device, enable_mkldnn, etc.)
     """
+    if paddle is None:
+        raise ImportError(
+            "PaddlePaddle is not installed. Install a PaddlePaddle build that matches "
+            "your hardware, for example: pip install paddlepaddle"
+        )
+
     kwargs = {}
     
     # 1. Detect Hardware -> 'device' argument

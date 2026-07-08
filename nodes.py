@@ -1,14 +1,101 @@
-
-import sys
-import os
+import json
 import traceback
 from .utils import tensor_to_cv2_img, get_paddle_hw_kwargs
 
-# Attempt to import PaddleOCR
 try:
     from paddleocr import PaddleOCR
-except ImportError:
+except Exception:
     PaddleOCR = None
+
+try:
+    from paddleocr import PaddleOCRVL
+    PaddleOCRVL_IMPORT_ERROR = None
+except Exception as e:
+    PaddleOCRVL = None
+    PaddleOCRVL_IMPORT_ERROR = e
+
+
+def _json_safe(value):
+    if isinstance(value, dict):
+        return {str(k): _json_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(v) for v in value]
+    if hasattr(value, "tolist"):
+        return _json_safe(value.tolist())
+    if hasattr(value, "item"):
+        try:
+            return value.item()
+        except Exception:
+            pass
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    return str(value)
+
+
+def _extract_markdown_text(markdown):
+    if isinstance(markdown, dict):
+        text = markdown.get("markdown_texts", "")
+        if isinstance(text, list):
+            return "\n\n".join(str(item) for item in text if item)
+        return str(text or "")
+    if isinstance(markdown, list):
+        return "\n\n".join(str(item) for item in markdown if item)
+    if isinstance(markdown, str):
+        return markdown
+    return ""
+
+
+def _extract_plain_text_from_vl_json(data):
+    data = data.get("res", data) if isinstance(data, dict) else data
+    if not isinstance(data, dict):
+        return ""
+
+    parsing_res = data.get("parsing_res_list")
+    if isinstance(parsing_res, list):
+        chunks = []
+        for block in parsing_res:
+            if not isinstance(block, dict):
+                continue
+            content = block.get("block_content") or block.get("content") or block.get("text")
+            if isinstance(content, str) and content.strip():
+                chunks.append(content.strip())
+        if chunks:
+            return "\n".join(chunks)
+
+    chunks = []
+
+    def walk(value):
+        if isinstance(value, dict):
+            for key in ("block_content", "content", "text", "rec_text"):
+                item = value.get(key)
+                if isinstance(item, str) and item.strip():
+                    chunks.append(item.strip())
+            for item in value.values():
+                walk(item)
+        elif isinstance(value, (list, tuple)):
+            for item in value:
+                walk(item)
+
+    walk(data)
+    return "\n".join(dict.fromkeys(chunks))
+
+
+def _normalize_engine(engine):
+    return None if engine == "auto" else engine
+
+
+def _normalize_optional_text(value):
+    if value is None:
+        return None
+    value = str(value).strip()
+    return None if value == "" or value.lower() == "auto" else value
+
+
+def _normalize_optional_number(value):
+    if value is None:
+        return None
+    return None if value < 0 else value
+
 
 class PaddleOCR_Node:
     """
@@ -240,3 +327,177 @@ class PaddleOCR_Unified_Node:
             traceback.print_exc()
             raise RuntimeError(f"Unified OCR Failed: {e}")
 
+
+class PaddleOCR_VL_Node:
+    """
+    True PaddleOCR-VL document parsing node.
+    Uses paddleocr.PaddleOCRVL instead of the standard PaddleOCR scene OCR API.
+    """
+    def __init__(self):
+        self._pipeline = None
+        self._pipeline_key = None
+
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "image": ("IMAGE",),
+                "pipeline_version": (["v1.6", "v1.5", "v1"], {"default": "v1.6"}),
+                "engine": (["auto", "paddle", "paddle_static", "paddle_dynamic", "transformers"], {"default": "auto"}),
+                "device": ("STRING", {"default": "auto"}),
+                "use_doc_orientation_classify": ("BOOLEAN", {"default": False}),
+                "use_doc_unwarping": ("BOOLEAN", {"default": False}),
+                "use_layout_detection": ("BOOLEAN", {"default": True}),
+                "use_chart_recognition": ("BOOLEAN", {"default": False}),
+                "use_seal_recognition": ("BOOLEAN", {"default": False}),
+                "use_ocr_for_image_block": ("BOOLEAN", {"default": False}),
+                "format_block_content": ("BOOLEAN", {"default": True}),
+            },
+            "optional": {
+                "layout_threshold": ("FLOAT", {"default": -1.0, "min": -1.0, "max": 1.0, "step": 0.01}),
+                "max_new_tokens": ("INT", {"default": 0, "min": 0, "max": 32768, "step": 1}),
+                "vl_rec_server_url": ("STRING", {"default": ""}),
+                "vl_rec_api_model_name": ("STRING", {"default": ""}),
+                "use_tensorrt": ("BOOLEAN", {"default": False}),
+                "precision": (["fp32", "fp16", "int8"], {"default": "fp32"}),
+            },
+        }
+
+    RETURN_TYPES = ("STRING", "STRING", "JSON")
+    RETURN_NAMES = ("markdown", "text", "json_output")
+    FUNCTION = "apply_vl"
+    CATEGORY = "PaddleOCR"
+
+    def _get_pipeline(self, init_kwargs):
+        key = json.dumps(_json_safe(init_kwargs), sort_keys=True, ensure_ascii=False)
+        if self._pipeline is None or self._pipeline_key != key:
+            print(f"DEBUG: Initializing PaddleOCRVL with {init_kwargs}")
+            self._pipeline = PaddleOCRVL(**init_kwargs)
+            self._pipeline_key = key
+        return self._pipeline
+
+    def apply_vl(
+        self,
+        image,
+        pipeline_version,
+        engine,
+        device,
+        use_doc_orientation_classify,
+        use_doc_unwarping,
+        use_layout_detection,
+        use_chart_recognition,
+        use_seal_recognition,
+        use_ocr_for_image_block,
+        format_block_content,
+        layout_threshold=-1.0,
+        max_new_tokens=0,
+        vl_rec_server_url="",
+        vl_rec_api_model_name="",
+        use_tensorrt=False,
+        precision="fp32",
+    ):
+        if PaddleOCRVL is None:
+            detail = f" Import error: {PaddleOCRVL_IMPORT_ERROR}" if PaddleOCRVL_IMPORT_ERROR else ""
+            raise ImportError(
+                "PaddleOCRVL is not available. Install PaddleOCR with document parsing "
+                'support, for example: pip install -U "paddleocr[doc-parser]".'
+                f"{detail}"
+            )
+
+        try:
+            init_kwargs = {
+                "pipeline_version": pipeline_version,
+                "use_doc_orientation_classify": use_doc_orientation_classify,
+                "use_doc_unwarping": use_doc_unwarping,
+                "use_layout_detection": use_layout_detection,
+                "use_chart_recognition": use_chart_recognition,
+                "use_seal_recognition": use_seal_recognition,
+                "use_ocr_for_image_block": use_ocr_for_image_block,
+                "format_block_content": format_block_content,
+            }
+
+            normalized_engine = _normalize_engine(engine)
+            if normalized_engine:
+                init_kwargs["engine"] = normalized_engine
+
+            normalized_device = _normalize_optional_text(device)
+            if normalized_device:
+                init_kwargs["device"] = normalized_device
+
+            normalized_layout_threshold = _normalize_optional_number(layout_threshold)
+            if normalized_layout_threshold is not None:
+                init_kwargs["layout_threshold"] = normalized_layout_threshold
+
+            normalized_max_new_tokens = max_new_tokens if max_new_tokens > 0 else None
+            if normalized_max_new_tokens is not None:
+                init_kwargs["max_new_tokens"] = normalized_max_new_tokens
+
+            server_url = _normalize_optional_text(vl_rec_server_url)
+            if server_url:
+                init_kwargs["vl_rec_server_url"] = server_url
+
+            api_model_name = _normalize_optional_text(vl_rec_api_model_name)
+            if api_model_name:
+                init_kwargs["vl_rec_api_model_name"] = api_model_name
+
+            if use_tensorrt:
+                init_kwargs["use_tensorrt"] = True
+                init_kwargs["precision"] = precision
+
+            pipeline = self._get_pipeline(init_kwargs)
+            cv_images = tensor_to_cv2_img(image)
+
+            predict_kwargs = {
+                "use_doc_orientation_classify": use_doc_orientation_classify,
+                "use_doc_unwarping": use_doc_unwarping,
+                "use_layout_detection": use_layout_detection,
+                "use_chart_recognition": use_chart_recognition,
+                "use_seal_recognition": use_seal_recognition,
+                "use_ocr_for_image_block": use_ocr_for_image_block,
+                "format_block_content": format_block_content,
+            }
+            if normalized_layout_threshold is not None:
+                predict_kwargs["layout_threshold"] = normalized_layout_threshold
+            if normalized_max_new_tokens is not None:
+                predict_kwargs["max_new_tokens"] = normalized_max_new_tokens
+
+            try:
+                results = pipeline.predict(input=cv_images, **predict_kwargs)
+            except TypeError as e:
+                if "input" not in str(e):
+                    raise
+                results = pipeline.predict(cv_images, **predict_kwargs)
+
+            markdown_pages = []
+            text_pages = []
+            json_pages = []
+
+            for result in results:
+                if isinstance(result, dict):
+                    result_json = result
+                    result_markdown = result.get("markdown")
+                else:
+                    result_json = getattr(result, "json", None)
+                    result_markdown = getattr(result, "markdown", None)
+
+                if callable(result_json):
+                    result_json = result_json()
+                if callable(result_markdown):
+                    result_markdown = result_markdown()
+
+                markdown_text = _extract_markdown_text(result_markdown)
+                plain_text = _extract_plain_text_from_vl_json(result_json) or markdown_text
+
+                markdown_pages.append(markdown_text)
+                text_pages.append(plain_text)
+                json_pages.append(_json_safe(result_json if result_json is not None else result))
+
+            markdown_output = "\n\n".join(page for page in markdown_pages if page)
+            text_output = "\n\n".join(page for page in text_pages if page)
+            json_output = json.dumps(json_pages, ensure_ascii=False, indent=2)
+
+            return (markdown_output, text_output, json_output)
+
+        except Exception as e:
+            traceback.print_exc()
+            raise RuntimeError(f"PaddleOCR-VL Failed: {e}")

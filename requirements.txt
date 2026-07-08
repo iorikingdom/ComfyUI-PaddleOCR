@@ -1,4 +1,5 @@
-paddlepaddle
-paddleocr
+# For CUDA builds, install the matching paddlepaddle-gpu package manually first.
+paddlepaddle>=3.2.1
+paddleocr[doc-parser]>=3.6.0
 opencv-python-headless
 numpy
