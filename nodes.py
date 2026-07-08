@@ -395,11 +395,24 @@ class PaddleOCR_Unified_Node:
             if PaddleOCR is None:
                     raise ImportError("PaddleOCR not installed.")
             
-            # Standard Init
-            ocr = PaddleOCR(ocr_version=ocr_version, lang=language, use_angle_cls=use_angle_cls, **hw_kwargs)
+            try:
+                ocr = PaddleOCR(
+                    ocr_version=ocr_version,
+                    lang=language,
+                    use_textline_orientation=use_angle_cls,
+                    **hw_kwargs,
+                )
+            except TypeError:
+                ocr = PaddleOCR(ocr_version=ocr_version, lang=language, use_angle_cls=use_angle_cls, **hw_kwargs)
             
             for img_numpy in cv_images:
-                result = ocr.ocr(img_numpy, cls=use_angle_cls) 
+                try:
+                    result = ocr.ocr(img_numpy, use_textline_orientation=use_angle_cls)
+                except TypeError:
+                    try:
+                        result = ocr.ocr(img_numpy, cls=use_angle_cls)
+                    except TypeError:
+                        result = ocr.ocr(img_numpy)
                 page_txt, page_json = _extract_ppocr_text_json(result)
                 
                 results_txt.append("\n".join(page_txt))
