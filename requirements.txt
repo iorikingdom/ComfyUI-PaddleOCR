@@ -1,5 +1,7 @@
-# For CUDA builds, install the matching paddlepaddle-gpu package manually first.
-paddlepaddle>=3.2.1
+# PaddleOCR-VL runs through the Transformers engine by default so it can share
+# ComfyUI's existing PyTorch/CUDA runtime. Do not install paddlepaddle here.
 paddleocr[doc-parser]>=3.6.0
-opencv-python-headless
-numpy
+transformers>=4.57.0
+accelerate>=1.12.0
+opencv-python-headless<5
+numpy<2

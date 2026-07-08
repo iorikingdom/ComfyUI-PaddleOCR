@@ -331,7 +331,8 @@ class PaddleOCR_Unified_Node:
 class PaddleOCR_VL_Node:
     """
     True PaddleOCR-VL document parsing node.
-    Uses paddleocr.PaddleOCRVL instead of the standard PaddleOCR scene OCR API.
+    Uses paddleocr.PaddleOCRVL with the Transformers engine by default so it can
+    share ComfyUI's PyTorch/CUDA runtime instead of installing PaddlePaddle.
     """
     def __init__(self):
         self._pipeline = None
@@ -343,8 +344,8 @@ class PaddleOCR_VL_Node:
             "required": {
                 "image": ("IMAGE",),
                 "pipeline_version": (["v1.6", "v1.5", "v1"], {"default": "v1.6"}),
-                "engine": (["auto", "paddle", "paddle_static", "paddle_dynamic", "transformers"], {"default": "auto"}),
-                "device": ("STRING", {"default": "auto"}),
+                "engine": (["transformers", "auto", "paddle", "paddle_static", "paddle_dynamic"], {"default": "transformers"}),
+                "device": ("STRING", {"default": "gpu:0"}),
                 "use_doc_orientation_classify": ("BOOLEAN", {"default": False}),
                 "use_doc_unwarping": ("BOOLEAN", {"default": False}),
                 "use_layout_detection": ("BOOLEAN", {"default": True}),
@@ -400,7 +401,8 @@ class PaddleOCR_VL_Node:
             detail = f" Import error: {PaddleOCRVL_IMPORT_ERROR}" if PaddleOCRVL_IMPORT_ERROR else ""
             raise ImportError(
                 "PaddleOCRVL is not available. Install PaddleOCR with document parsing "
-                'support, for example: pip install -U "paddleocr[doc-parser]".'
+                "support and a Transformers/PyTorch backend, for example: "
+                'pip install -U "paddleocr[doc-parser]" transformers accelerate.'
                 f"{detail}"
             )
 

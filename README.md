@@ -1,15 +1,16 @@
 # ComfyUI-PaddleOCR-VL
 
-A ComfyUI custom node package for PaddleOCR.
+A ComfyUI custom node package for PaddleOCR-VL document parsing.
 
-This repository now exposes both standard PP-OCR scene-text nodes and a real PaddleOCR-VL document parsing node. The VL node uses `paddleocr.PaddleOCRVL`, not the ordinary `PaddleOCR` API.
+This repository exposes a real PaddleOCR-VL document parsing node. The VL node uses `paddleocr.PaddleOCRVL` with the `transformers` engine by default, so it can share ComfyUI's existing PyTorch/CUDA runtime instead of installing PaddlePaddle into the ComfyUI environment.
 
 ## Features
 
 - **PaddleOCR-VL Document Parser**: Parse document images into Markdown, plain text, and structured JSON with PaddleOCR-VL v1/v1.5/v1.6.
+- **PyTorch/Transformers Runtime**: Defaults to `engine=transformers` for ComfyUI-friendly inference.
 - **Document Layout Understanding**: Optional layout detection, chart recognition, seal recognition, document orientation classification, and document unwarping.
-- **Standard PP-OCR Nodes**: Keep lightweight text detection and recognition with PP-OCRv5/v4/v3.
-- **Model Version Selection**: Choose between PP-OCR versions for scene OCR, or PaddleOCR-VL pipeline versions for document parsing.
+- **Legacy PP-OCR Nodes**: Existing ordinary OCR nodes remain registered, but they still require PaddlePaddle and are not recommended for a PyTorch-only ComfyUI environment.
+- **Model Version Selection**: Choose between PaddleOCR-VL pipeline versions for document parsing.
 
 ## Installation
 
@@ -28,12 +29,12 @@ This repository now exposes both standard PP-OCR scene-text nodes and a real Pad
    pip install -r ComfyUI-PaddleOCR-VL/requirements.txt
    ```
 
-   `requirements.txt` already includes the PaddleOCR document parsing extra. If you are updating an existing environment manually, run:
+   `requirements.txt` intentionally does not install `paddlepaddle`. It installs the PaddleOCR document parsing package plus PyTorch/Transformers-side dependencies. If you are updating an existing environment manually, run:
    ```bash
-   pip install -U "paddleocr[doc-parser]"
+   pip install -U "paddleocr[doc-parser]" transformers accelerate "opencv-python-headless<5" "numpy<2"
    ```
 
-   If you use CUDA, install the PaddlePaddle GPU package that matches your CUDA version before installing this node's requirements. The plain `paddlepaddle` package is CPU-only.
+   Do not install `paddlepaddle` or `paddlepaddle-gpu` into the same venv as ComfyUI unless you have checked CUDA library compatibility. PaddlePaddle GPU wheels can replace NVIDIA runtime packages that PyTorch depends on.
 
 4. Restart ComfyUI.
 
@@ -48,6 +49,8 @@ This repository now exposes both standard PP-OCR scene-text nodes and a real Pad
    - `v1.5`: previous VL pipeline with improved real-world robustness.
    - `v1`: original PaddleOCR-VL pipeline.
 4. Configure optional modules:
+   - `engine`: keep the default `transformers` for PyTorch/ComfyUI compatibility.
+   - `device`: defaults to `gpu:0`; use `cpu` only for CPU inference.
    - `use_layout_detection`: use the full document parsing workflow.
    - `use_doc_orientation_classify`: classify and correct document orientation.
    - `use_doc_unwarping`: correct warped document images.
@@ -63,7 +66,7 @@ The first PaddleOCR-VL run may take a long time because PaddleOCR downloads and 
 
 ### Standard PP-OCR Nodes
 
-Use `PaddleOCR Unified (PP-OCR)` or `PaddleOCR (Legacy)` when you only need ordinary text detection and recognition. These nodes use `PaddleOCR(...)` with PP-OCRv5/v4/v3 and are not PaddleOCR-VL.
+Use `PaddleOCR Unified (PP-OCR)` or `PaddleOCR (Legacy)` only when you explicitly want ordinary text detection and recognition and have installed PaddlePaddle. These nodes use `PaddleOCR(...)` with PP-OCRv5/v4/v3 and are not PaddleOCR-VL.
 
 ## Verification
 
@@ -74,7 +77,7 @@ python verify_vl.py
 
 If it prints `PaddleOCRVL NOT found`, install:
 ```bash
-pip install -U "paddleocr[doc-parser]"
+pip install -U "paddleocr[doc-parser]" transformers accelerate "opencv-python-headless<5" "numpy<2"
 ```
 
 ## Credits
