@@ -4,10 +4,16 @@ A ComfyUI custom node package for PaddleOCR-VL document parsing.
 
 This repository exposes a real PaddleOCR-VL document parsing node. The VL node uses `paddleocr.PaddleOCRVL` with the `transformers` engine by default, so it can share ComfyUI's existing PyTorch/CUDA runtime instead of installing PaddlePaddle into the ComfyUI environment.
 
+Target runtime for the deployed ComfyUI machine:
+
+- `torch 2.10.0+cu130`
+- CUDA `13.0`
+- NVIDIA GPU via `engine=transformers`
+
 ## Features
 
 - **PaddleOCR-VL Document Parser**: Parse document images into Markdown, plain text, and structured JSON with PaddleOCR-VL v1/v1.5/v1.6.
-- **PyTorch/Transformers Runtime**: Defaults to `engine=transformers` for ComfyUI-friendly inference.
+- **PyTorch/Transformers Runtime**: Defaults to `engine=transformers` for ComfyUI-friendly inference and validates PyTorch CUDA availability before initializing PaddleOCR-VL.
 - **Document Layout Understanding**: Optional layout detection, chart recognition, seal recognition, document orientation classification, and document unwarping.
 - **Legacy PP-OCR Nodes**: Existing ordinary OCR nodes remain registered, but they still require PaddlePaddle and are not recommended for a PyTorch-only ComfyUI environment.
 - **Model Version Selection**: Choose between PaddleOCR-VL pipeline versions for document parsing.
@@ -29,12 +35,14 @@ This repository exposes a real PaddleOCR-VL document parsing node. The VL node u
    pip install -r ComfyUI-PaddleOCR-VL/requirements.txt
    ```
 
-   `requirements.txt` intentionally does not install `paddlepaddle`. It installs PaddleOCR 3.7.0 or newer with document parsing support plus PyTorch/Transformers-side dependencies. If you are updating an existing environment manually, run:
+   `requirements.txt` intentionally does not install `paddlepaddle` or `torch`. It installs PaddleOCR 3.7.0 or newer with document parsing support plus Transformers-side dependencies, while reusing ComfyUI's existing PyTorch runtime. If you are updating an existing environment manually, run:
    ```bash
    pip install -U "paddleocr[doc-parser]>=3.7.0" transformers accelerate "opencv-python-headless<5" "numpy<2"
    ```
 
    Do not install `paddlepaddle` or `paddlepaddle-gpu` into the same venv as ComfyUI unless you have checked CUDA library compatibility. PaddlePaddle GPU wheels can replace NVIDIA runtime packages that PyTorch depends on.
+
+   Do not install or upgrade `torch` from this package. The node is intended to reuse the ComfyUI environment's existing `torch 2.10.0+cu130`.
 
 4. Restart ComfyUI.
 

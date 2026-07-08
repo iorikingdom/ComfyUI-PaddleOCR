@@ -1,5 +1,6 @@
 # PaddleOCR-VL runs through the Transformers engine by default so it can share
 # ComfyUI's existing PyTorch/CUDA runtime. Do not install paddlepaddle here.
+# Do not list torch here; reuse the torch build already installed by ComfyUI.
 paddleocr[doc-parser]>=3.7.0
 transformers>=4.57.0
 accelerate>=1.12.0

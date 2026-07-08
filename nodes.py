@@ -97,6 +97,39 @@ def _normalize_optional_number(value):
     return None if value < 0 else value
 
 
+def _device_requests_cuda(device):
+    if not device:
+        return False
+    device = str(device).lower()
+    return "gpu" in device or "cuda" in device
+
+
+def _validate_transformers_runtime(device):
+    try:
+        import torch
+    except Exception as e:
+        raise ImportError(
+            "PaddleOCR-VL engine=transformers requires the PyTorch runtime from "
+            "ComfyUI. Install or repair torch before running this node."
+        ) from e
+
+    torch_version = getattr(torch, "__version__", "unknown")
+    cuda_version = getattr(getattr(torch, "version", None), "cuda", None)
+    cuda_available = bool(torch.cuda.is_available())
+    print(
+        "DEBUG: PaddleOCR-VL transformers runtime - "
+        f"torch={torch_version}, torch.version.cuda={cuda_version}, "
+        f"cuda_available={cuda_available}, device={device}"
+    )
+
+    if _device_requests_cuda(device) and not cuda_available:
+        raise RuntimeError(
+            "PaddleOCR-VL is configured for GPU inference, but PyTorch reports "
+            "cuda.is_available() == False. For this ComfyUI install the expected "
+            "runtime is torch 2.10.0+cu130 with CUDA 13.0."
+        )
+
+
 class PaddleOCR_Node:
     """
     Main PaddleOCR Custom Node.
@@ -425,6 +458,9 @@ class PaddleOCR_VL_Node:
             normalized_device = _normalize_optional_text(device)
             if normalized_device:
                 init_kwargs["device"] = normalized_device
+
+            if normalized_engine == "transformers":
+                _validate_transformers_runtime(normalized_device)
 
             normalized_layout_threshold = _normalize_optional_number(layout_threshold)
             if normalized_layout_threshold is not None:
