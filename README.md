@@ -29,9 +29,9 @@ This repository exposes a real PaddleOCR-VL document parsing node. The VL node u
    pip install -r ComfyUI-PaddleOCR-VL/requirements.txt
    ```
 
-   `requirements.txt` intentionally does not install `paddlepaddle`. It installs the PaddleOCR document parsing package plus PyTorch/Transformers-side dependencies. If you are updating an existing environment manually, run:
+   `requirements.txt` intentionally does not install `paddlepaddle`. It installs PaddleOCR 3.7.0 or newer with document parsing support plus PyTorch/Transformers-side dependencies. If you are updating an existing environment manually, run:
    ```bash
-   pip install -U "paddleocr[doc-parser]" transformers accelerate "opencv-python-headless<5" "numpy<2"
+   pip install -U "paddleocr[doc-parser]>=3.7.0" transformers accelerate "opencv-python-headless<5" "numpy<2"
    ```
 
    Do not install `paddlepaddle` or `paddlepaddle-gpu` into the same venv as ComfyUI unless you have checked CUDA library compatibility. PaddlePaddle GPU wheels can replace NVIDIA runtime packages that PyTorch depends on.
@@ -77,7 +77,7 @@ python verify_vl.py
 
 If it prints `PaddleOCRVL NOT found`, install:
 ```bash
-pip install -U "paddleocr[doc-parser]" transformers accelerate "opencv-python-headless<5" "numpy<2"
+pip install -U "paddleocr[doc-parser]>=3.7.0" transformers accelerate "opencv-python-headless<5" "numpy<2"
 ```
 
 ## Credits
