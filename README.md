@@ -15,7 +15,7 @@ Target runtime for the deployed ComfyUI machine:
 - **PaddleOCR-VL Document Parser**: Parse document images into Markdown, plain text, and structured JSON with PaddleOCR-VL v1/v1.5/v1.6.
 - **PyTorch/Transformers Runtime**: Defaults to `engine=transformers` for ComfyUI-friendly inference and validates PyTorch CUDA availability before initializing PaddleOCR-VL.
 - **Document Layout Understanding**: Optional layout detection, chart recognition, seal recognition, document orientation classification, and document unwarping.
-- **Legacy PP-OCR Nodes**: Existing ordinary OCR nodes remain registered, but they still require PaddlePaddle and are not recommended for a PyTorch-only ComfyUI environment.
+- **Standard PP-OCR Nodes**: Existing ordinary OCR nodes remain registered and default to PP-OCRv6, but they still require PaddlePaddle and are not recommended for a PyTorch-only ComfyUI environment.
 - **Model Version Selection**: Choose between PaddleOCR-VL pipeline versions for document parsing.
 
 ## Installation
@@ -74,7 +74,7 @@ The first PaddleOCR-VL run may take a long time because PaddleOCR downloads and 
 
 ### Standard PP-OCR Nodes
 
-Use `PaddleOCR Unified (PP-OCR)` or `PaddleOCR (Legacy)` only when you explicitly want ordinary text detection and recognition and have installed PaddlePaddle. These nodes use `PaddleOCR(...)` with PP-OCRv5/v4/v3 and are not PaddleOCR-VL.
+Use `PaddleOCR Unified (PP-OCR)` or `PaddleOCR (Legacy)` only when you explicitly want ordinary text detection and recognition and have installed PaddlePaddle. These nodes use `PaddleOCR(...)` with PP-OCRv6/v5/v4/v3 and are not PaddleOCR-VL. PP-OCRv6 requires PaddleOCR 3.7.0 or newer.
 
 ## Verification
 

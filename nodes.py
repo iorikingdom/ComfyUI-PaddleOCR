@@ -15,6 +15,9 @@ except Exception as e:
     PaddleOCRVL_IMPORT_ERROR = e
 
 
+PP_OCR_VERSIONS = ["PP-OCRv6", "PP-OCRv5", "PP-OCRv4", "PP-OCRv3"]
+
+
 def _json_safe(value):
     if isinstance(value, dict):
         return {str(k): _json_safe(v) for k, v in value.items()}
@@ -78,6 +81,91 @@ def _extract_plain_text_from_vl_json(data):
 
     walk(data)
     return "\n".join(dict.fromkeys(chunks))
+
+
+def _sequence_item(value, index):
+    if value is None:
+        return None
+    try:
+        return value[index]
+    except Exception:
+        return None
+
+
+def _extract_ppocr_text_json(result):
+    texts = []
+    rows = []
+
+    def add_dict(item):
+        rec_texts = item.get("rec_texts", [])
+        if isinstance(rec_texts, str):
+            rec_texts = [rec_texts]
+        if not isinstance(rec_texts, (list, tuple)):
+            rec_texts = []
+
+        rec_scores = item.get("rec_scores", [])
+        rec_polys = item.get("rec_polys")
+        if rec_polys is None:
+            rec_polys = item.get("dt_polys")
+        if rec_polys is None:
+            rec_polys = item.get("rec_boxes")
+
+        for idx, text in enumerate(rec_texts):
+            if text is None:
+                continue
+            text = str(text)
+            texts.append(text)
+
+            score = _sequence_item(rec_scores, idx)
+            try:
+                score = float(score) if score is not None else None
+            except Exception:
+                score = _json_safe(score)
+
+            rows.append({
+                "text": text,
+                "confidence": score,
+                "box": _json_safe(_sequence_item(rec_polys, idx)),
+            })
+
+        if rec_texts:
+            return
+
+        text = item.get("text") or item.get("rec_text")
+        if text:
+            texts.append(str(text))
+            rows.append({"text": str(text), "confidence": None, "box": None})
+
+    def add_line(line):
+        if line is None:
+            return
+        if isinstance(line, dict):
+            add_dict(line)
+            return
+        if not isinstance(line, (list, tuple)):
+            return
+
+        if len(line) >= 2 and isinstance(line[1], (list, tuple)) and line[1]:
+            text = line[1][0]
+            if isinstance(text, str):
+                score = line[1][1] if len(line[1]) > 1 else None
+                try:
+                    score = float(score) if score is not None else None
+                except Exception:
+                    score = _json_safe(score)
+                texts.append(text)
+                rows.append({
+                    "text": text,
+                    "confidence": score,
+                    "box": _json_safe(line[0]),
+                })
+                return
+
+        for child in line:
+            add_line(child)
+
+    add_line(result)
+    return texts, rows
 
 
 def _normalize_engine(engine):
@@ -145,8 +233,7 @@ class PaddleOCR_Node:
                 "language": (["ch", "en", "japan", "korean", "chinese_cht", "french", "german"], {"default": "ch"}),
                 # Renamed from use_angle_cls
                 "vertical_direction": ("BOOLEAN", {"default": True}),
-                # Added ocr_version
-                "ocr_version": (["PP-OCRv5", "PP-OCRv4", "PP-OCRv3"], {"default": "PP-OCRv5"}),
+                "ocr_version": (PP_OCR_VERSIONS, {"default": "PP-OCRv6"}),
             }
         }
 
@@ -266,7 +353,7 @@ class PaddleOCR_TestNode:
 class PaddleOCR_Unified_Node:
     """
     Reviewer: User (Designer)
-    Concept: Pure OCR Node (v5/v4/v3)
+    Concept: Pure OCR Node (v6/v5/v4/v3)
     A single node acting as a facade for standard PaddleOCR capabilities.
     """
     @classmethod
@@ -274,7 +361,7 @@ class PaddleOCR_Unified_Node:
         return {
             "required": {
                 "image": ("IMAGE",),
-                "ocr_version": (["PP-OCRv5", "PP-OCRv4", "PP-OCRv3"], {"default": "PP-OCRv5"}),
+                "ocr_version": (PP_OCR_VERSIONS, {"default": "PP-OCRv6"}),
                 "language": (["ch", "en", "japan", "korean", "chinese_cht", "french", "german"], {"default": "ch"}),
                 "use_angle_cls": ("BOOLEAN", {"default": True, "label_on": "Enable Angle Classification", "label_off": "Disable"}),
             },
@@ -313,33 +400,7 @@ class PaddleOCR_Unified_Node:
             
             for img_numpy in cv_images:
                 result = ocr.ocr(img_numpy, cls=use_angle_cls) 
-                # Result structure: [[[[x1,y1],[x2,y2]..], ("text", score)], ...]
-                
-                page_txt = []
-                page_json = []
-                
-                if result:
-                        # Handle batch wrapper if needed
-                        if isinstance(result, list) and len(result)>0 and isinstance(result[0], list) and isinstance(result[0][0], list):
-                            lines = result[0]
-                        else:
-                            lines = result
-                        
-                        for line in lines:
-                            # line: [box, (text, score)]
-                            if len(line) >= 2:
-                                text_info = line[1]
-                                text = text_info[0]
-                                score = text_info[1]
-                                box = line[0]
-                                
-                                page_txt.append(text)
-                                
-                                page_json.append({
-                                    "text": text,
-                                    "confidence": float(score),
-                                    "box": box
-                                })
+                page_txt, page_json = _extract_ppocr_text_json(result)
                 
                 results_txt.append("\n".join(page_txt))
                 results_json.append(page_json)
